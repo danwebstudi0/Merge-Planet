@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#050510">
+<title>Merge Planet</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:#050510; --panel:rgba(18,20,45,.82); --panel2:rgba(28,30,65,.9);
+  --accent:#7c6cff; --accent2:#00e5ff; --gold:#ffd54f; --danger:#ff5470;
+  --text:#eef0ff; --dim:#9aa0c7;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:-apple-system,'Segoe UI',Roboto,Inter,sans-serif;touch-action:none;}
+#bgCanvas{position:fixed;inset:0;z-index:0;}
+.screen{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;align-items:center;}
+.screen.active{display:flex;}
+.hidden{display:none!important;}
+
+/* ---------- MENU ---------- */
+#menuScreen{justify-content:center;gap:14px;padding:20px;}
+.titleWrap{text-align:center;margin-bottom:6px;animation:floatY 5s ease-in-out infinite;}
+.gameTitle{font-size:clamp(38px,11vw,64px);font-weight:900;letter-spacing:2px;line-height:1.05;
+  background:linear-gradient(135deg,#a78bff 0%,#00e5ff 55%,#ffd54f 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 22px rgba(124,108,255,.55));}
+.gameSub{font-size:clamp(12px,3.4vw,16px);letter-spacing:6px;color:var(--dim);margin-top:4px;text-transform:uppercase;}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.bestBadge{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid rgba(255,213,79,.35);
+  border-radius:999px;padding:10px 22px;font-size:15px;font-weight:700;color:var(--gold);
+  box-shadow:0 0 24px rgba(255,213,79,.15);backdrop-filter:blur(10px);}
+.menuBtns{display:flex;flex-direction:column;gap:12px;width:min(78vw,300px);margin-top:10px;}
+.btn{position:relative;border:none;border-radius:18px;padding:16px 20px;font-size:17px;font-weight:800;letter-spacing:1.5px;
+  color:#fff;cursor:pointer;background:var(--panel2);border:1px solid rgba(124,108,255,.35);
+  backdrop-filter:blur(10px);box-shadow:0 8px 26px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+  transition:transform .12s ease, box-shadow .12s ease;text-transform:uppercase;font-family:inherit;}
+.btn:active{transform:scale(.96);}
+.btn.primary{background:linear-gradient(135deg,#6a5cff,#00b8d9);border-color:rgba(255,255,255,.25);
+  box-shadow:0 10px 32px rgba(106,92,255,.45), inset 0 1px 0 rgba(255,255,255,.25);}
+.btn.danger{border-color:rgba(255,84,112,.5);}
+.menuFoot{margin-top:14px;font-size:12px;color:var(--dim);text-align:center;line-height:1.5;}
+.userChip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid rgba(255,255,255,.12);
+  border-radius:999px;padding:7px 16px;font-size:13px;color:var(--dim);}
+
+/* ---------- GAME HUD ---------- */
+#gameScreen{z-index:5;}
+#gameCanvas{position:absolute;inset:0;z-index:1;}
+#hud{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;justify-content:space-between;align-items:flex-start;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;pointer-events:none;}
+.hudBox{background:var(--panel);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:8px 14px;
+  backdrop-filter:blur(8px);text-align:center;min-width:86px;pointer-events:none;}
+.hudLabel{font-size:10px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;}
+.hudValue{font-size:20px;font-weight:900;color:#fff;line-height:1.2;}
+.hudValue.gold{color:var(--gold);}
+.hudValue.cyan{color:var(--accent2);}
+#nextBox{display:flex;flex-direction:column;align-items:center;}
+#nextEmoji{font-size:26px;line-height:1.2;filter:drop-shadow(0 0 8px rgba(0,229,255,.6));}
+#pauseBtn{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;z-index:25;
+  width:46px;height:46px;border-radius:14px;border:1px solid rgba(255,255,255,.15);background:var(--panel);
+  color:#fff;font-size:19px;cursor:pointer;backdrop-filter:blur(8px);}
+#pauseBtn:active{transform:scale(.93);}
+
+/* ---------- OVERLAYS ---------- */
+.overlay{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;background:rgba(3,3,14,.82);backdrop-filter:blur(14px);padding:24px;}
+.overlay.active{display:flex;}
+.overlayTitle{font-size:clamp(26px,8vw,40px);font-weight:900;letter-spacing:3px;text-align:center;
+  background:linear-gradient(135deg,#a78bff,#00e5ff);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;filter:drop-shadow(0 0 18px rgba(124,108,255,.5));}
+.overlayTitle.red{background:linear-gradient(135deg,#ff5470,#ff9a5c);-webkit-background-clip:text;background-clip:text;}
+.statGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(86vw,340px);}
+.statCard{background:var(--panel2);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:12px;text-align:center;}
+.statCard .sl{font-size:10px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;}
+.statCard .sv{font-size:22px;font-weight:900;margin-top:3px;}
+.statCard.wide{grid-column:1/3;}
+.statCard .sv.big{font-size:30px;}
+.bigEmoji{font-size:56px;filter:drop-shadow(0 0 20px rgba(0,229,255,.7));animation:pulse 1.6s ease-in-out infinite;}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.overlayBtns{display:flex;flex-direction:column;gap:11px;width:min(78vw,300px);margin-top:6px;}
+
+/* ---------- RECORDS / COLLECTION / SETTINGS ---------- */
+.pageScreen{justify-content:flex-start;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 24px;overflow:hidden;}
+.pageHead{display:flex;align-items:center;gap:12px;width:100%;max-width:520px;margin-bottom:14px;}
+.backBtn{width:42px;height:42px;border-radius:13px;border:1px solid rgba(255,255,255,.15);background:var(--panel);
+  color:#fff;font-size:18px;cursor:pointer;flex-shrink:0;}
+.pageTitle{font-size:20px;font-weight:900;letter-spacing:2px;text-transform:uppercase;}
+.pageBody{width:100%;max-width:520px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-bottom:10px;}
+.collGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.collItem{background:var(--panel2);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:12px 6px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;min-height:118px;justify-content:center;}
+.collItem.locked{opacity:.55;}
+.collEmoji{font-size:32px;line-height:1.15;filter:drop-shadow(0 0 10px rgba(124,108,255,.5));}
+.collItem.locked .collEmoji{filter:grayscale(1) brightness(.35);}
+.collName{font-size:11px;font-weight:700;line-height:1.25;}
+.collLvl{font-size:9px;color:var(--dim);letter-spacing:1px;}
+.collScore{font-size:10px;color:var(--gold);font-weight:700;}
+.recCard{background:var(--panel2);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px;
+  display:flex;align-items:center;gap:14px;margin-bottom:10px;}
+.recIcon{font-size:30px;filter:drop-shadow(0 0 10px rgba(124,108,255,.5));}
+.recInfo{flex:1;}
+.recLabel{font-size:11px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;}
+.recValue{font-size:24px;font-weight:900;}
+.setRow{background:var(--panel2);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px;
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;}
+.setLabel{font-weight:700;font-size:15px;}
+.setDesc{font-size:11px;color:var(--dim);margin-top:2px;}
+.toggle{width:54px;height:30px;border-radius:999px;background:#2a2d55;position:relative;cursor:pointer;transition:.2s;flex-shrink:0;border:1px solid rgba(255,255,255,.12);}
+.toggle.on{background:linear-gradient(135deg,#6a5cff,#00b8d9);}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;}
+.toggle.on::after{left:27px;}
+
+/* ---------- TOASTS ---------- */
+#toastWrap{position:fixed;top:calc(env(safe-area-inset-top,0px) + 64px);left:0;right:0;z-index:60;display:flex;
+  flex-direction:column;align-items:center;gap:8px;pointer-events:none;}
+.toast{background:linear-gradient(135deg,rgba(106,92,255,.95),rgba(0,184,217,.95));border-radius:999px;
+  padding:11px 24px;font-weight:900;font-size:14px;letter-spacing:1px;box-shadow:0 10px 30px rgba(106,92,255,.5);
+  animation:toastIn .35s cubic-bezier(.2,1.4,.4,1), toastOut .4s ease 2.2s forwards;white-space:nowrap;}
+.toast.gold{background:linear-gradient(135deg,#c9a227,#ffd54f);color:#221a00;box-shadow:0 10px 30px rgba(255,213,79,.5);}
+@keyframes toastIn{from{transform:translateY(-30px) scale(.7);opacity:0}to{transform:none;opacity:1}}
+@keyframes toastOut{to{transform:translateY(-20px);opacity:0}}
+
+/* ---------- CONFIRM ---------- */
+#confirmModal .modalCard{background:var(--panel2);border:1px solid rgba(255,255,255,.14);border-radius:22px;
+  padding:26px 22px;width:min(82vw,320px);text-align:center;display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);animation:toastIn .3s cubic-bezier(.2,1.4,.4,1);}
+#confirmModal p{color:var(--dim);font-size:14px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<!-- ================= MENU ================= -->
+<div class="screen active" id="menuScreen">
+  <div class="userChip hidden" id="userChip"><span id="userName">👤 Игрок</span></div>
+  <div class="titleWrap">
+    <div class="gameTitle">MERGE<br>PLANET</div>
+    <div class="gameSub">космический мердж</div>
+  </div>
+  <div class="bestBadge">🏆 <span>Лучший результат:&nbsp;</span><span id="menuBest">0</span></div>
+  <div class="menuBtns">
+    <button class="btn primary" id="btnPlay">▶&nbsp; Играть</button>
+    <button class="btn" id="btnRecords">🏆&nbsp; Рекорды</button>
+    <button class="btn" id="btnCollection">📖&nbsp; Коллекция</button>
+    <button class="btn" id="btnSettings">⚙️&nbsp; Настройки</button>
+  </div>
+  <div class="menuFoot">Объединяй планеты • Открывай 21 космический объект<br>Работает внутри Telegram Mini App</div>
+</div>
+
+<!-- ================= GAME ================= -->
+<div class="screen" id="gameScreen">
+  <canvas id="gameCanvas"></canvas>
+  <div id="hud">
+    <div class="hudBox"><div class="hudLabel">Счёт</div><div class="hudValue" id="hudScore">0</div></div>
+    <div class="hudBox"><div class="hudLabel">Рекорд</div><div class="hudValue gold" id="hudBest">0</div></div>
+    <div class="hudBox" id="nextBox"><div class="hudLabel">Следующий</div><div id="nextEmoji">☄️</div></div>
+  </div>
+  <button id="pauseBtn">⏸️</button>
+</div>
+
+<!-- ================= PAUSE ================= -->
+<div class="overlay" id="pauseOverlay">
+  <div class="overlayTitle">ПАУЗА</div>
+  <div class="overlayBtns">
+    <button class="btn primary" id="btnResume">▶ Продолжить</button>
+    <button class="btn" id="btnRestart">🔄 Начать заново</button>
+    <button class="btn" id="btnQuit">🏠 Завершить игру</button>
+  </div>
+</div>
+
+<!-- ================= GAME OVER ================= -->
+<div class="overlay" id="gameOverOverlay">
+  <div class="overlayTitle red">GAME OVER</div>
+  <div class="bigEmoji" id="goEmoji">🌑</div>
+  <div class="statGrid">
+    <div class="statCard wide"><div class="sl">Счёт</div><div class="sv big" id="goScore">0</div></div>
+    <div class="statCard"><div class="sl">Рекорд</div><div class="sv gold" id="goBest">0</div></div>
+    <div class="statCard"><div class="sl">Объединений</div><div class="sv" id="goMerges">0</div></div>
+    <div class="statCard"><div class="sl">Крупнейший объект</div><div class="sv" id="goMaxName">—</div></div>
+    <div class="statCard"><div class="sl">Открыто уровней</div><div class="sv cyan" id="goLevels">0</div></div>
+  </div>
+  <div class="overlayBtns">
+    <button class="btn primary" id="btnGoAgain">🔄 Играть снова</button>
+    <button class="btn" id="btnGoMenu">🏠 В меню</button>
+    <button class="btn" id="btnGoShare">📤 Поделиться</button>
+  </div>
+</div>
+
+<!-- ================= RECORDS ================= -->
+<div class="screen pageScreen" id="recordsScreen">
+  <div class="pageHead"><button class="backBtn" data-back>←</button><div class="pageTitle">Рекорды</div></div>
+  <div class="pageBody">
+    <div class="recCard"><div class="recIcon">🏆</div><div class="recInfo"><div class="recLabel">Лучший результат</div><div class="recValue" id="recBest">0</div></div></div>
+    <div class="recCard"><div class="recIcon">📅</div><div class="recInfo"><div class="recLabel">Рекорд дня</div><div class="recValue" id="recDaily">0</div></div></div>
+    <div class="recCard"><div class="recIcon">🔥</div><div class="recInfo"><div class="recLabel">Всего объединений</div><div class="recValue" id="recMerges">0</div></div></div>
+    <div class="recCard"><div class="recIcon">🌌</div><div class="recInfo"><div class="recLabel">Крупнейший объект за всё время</div><div class="recValue" id="recMaxObj" style="font-size:18px">—</div></div></div>
+    <div class="recCard"><div class="recIcon">🎮</div><div class="recInfo"><div class="recLabel">Сыграно партий</div><div class="recValue" id="recGames">0</div></div></div>
+    <div class="recCard"><div class="recIcon">📖</div><div class="recInfo"><div class="recLabel">Открыто объектов</div><div class="recValue" id="recColl">0 / 21</div></div></div>
+    <button class="btn" style="width:100%" id="btnShare2">📤 Поделиться результатом</button>
+  </div>
+</div>
+
+<!-- ================= COLLECTION ================= -->
+<div class="screen pageScreen" id="collectionScreen">
+  <div class="pageHead"><button class="backBtn" data-back>←</button><div class="pageTitle">Коллекция</div></div>
+  <div class="pageBody"><div class="collGrid" id="collGrid"></div></div>
+</div>
+
+<!-- ================= SETTINGS ================= -->
+<div class="screen pageScreen" id="settingsScreen">
+  <div class="pageHead"><button class="backBtn" data-back>←</button><div class="pageTitle">Настройки</div></div>
+  <div class="pageBody">
+    <div class="setRow"><div><div class="setLabel">🔊 Звук</div><div class="setDesc">Звуковые эффекты объединений</div></div><div class="toggle" id="tglSound"></div></div>
+    <div class="setRow"><div><div class="setLabel">📳 Вибрация</div><div class="setDesc">Тактильный отклик при объединении</div></div><div class="toggle" id="tglHaptic"></div></div>
+    <div class="setRow"><div><div class="setLabel">🗑 Сброс прогресса</div><div class="setDesc">Удалить рекорды и коллекцию</div></div><button class="btn danger" style="padding:10px 16px;font-size:13px" id="btnReset">Сбросить</button></div>
+  </div>
+</div>
+
+<!-- ================= CONFIRM ================= -->
+<div class="overlay" id="confirmModal">
+  <div class="modalCard">
+    <div class="overlayTitle" style="font-size:22px" id="cfTitle">Точно?</div>
+    <p id="cfText">Текущий прогресс партии будет потерян.</p>
+    <button class="btn primary" id="cfYes">Да, подтверждаю</button>
+    <button class="btn" id="cfNo">Отмена</button>
+  </div>
+</div>
+
+<div id="toastWrap"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   MERGE PLANET — Telegram Mini App
+   ============================================================ */
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if (tg) {
+  try {
+    tg.ready(); tg.expand();
+    tg.setHeaderColor('#050510'); tg.setBackgroundColor('#050510');
+    if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+  } catch(e){}
+}
+
+/* ---------------- DATA ---------------- */
+const LEVELS = [
+  {e:"🪨",n:"Космическая пыль",s:10},
+  {e:"☄️",n:"Каменный астероид",s:25},
+  {e:"🔥",n:"Огненный астероид",s:45},
+  {e:"🌑",n:"Луна",s:70},
+  {e:"🪐",n:"Карликовая планета",s:100},
+  {e:"🌍",n:"Планета",s:140},
+  {e:"🌎",n:"Живая планета",s:190},
+  {e:"🔵",n:"Газовый гигант",s:250},
+  {e:"🌀",n:"Огромный газовый гигант",s:320},
+  {e:"💫",n:"Протозвезда",s:400},
+  {e:"⭐",n:"Звезда",s:500},
+  {e:"🔥",n:"Красный гигант",s:620},
+  {e:"💥",n:"Сверхновая",s:760},
+  {e:"⚫",n:"Чёрная дыра",s:920},
+  {e:"🌟",n:"Звёздная система",s:1100},
+  {e:"☀️",n:"Солнечная система",s:1300},
+  {e:"🌌",n:"Туманность",s:1520},
+  {e:"🌌",n:"Галактика",s:1760},
+  {e:"🌀",n:"Сверхскопление галактик",s:2020},
+  {e:"✨",n:"Вселенная",s:2300},
+  {e:"🌌",n:"Мультивселенная",s:2600},
+];
+const RARE_FROM = 13; // достижения с чёрной дыры
+
+/* ---------------- STORAGE ---------------- */
+const store = {
+  mem: {},
+  cloudReady: false,
+  init(){
+    try {
+      const raw = localStorage.getItem('mp_data');
+      if (raw) this.mem = JSON.parse(raw);
+    } catch(e){}
+    if (tg && tg.CloudStorage) {
+      tg.CloudStorage.getItem('mp_data', (err, val) => {
+        if (!err && val) {
+          try {
+            const c = JSON.parse(val);
+            if ((c.best||0) > (this.mem.best||0) || !this.mem.best) this.mem = Object.assign({}, this.mem, c);
+          } catch(e){}
+        }
+        this.cloudReady = true; refreshUI();
+      });
+    }
+  },
+  get(k, d){ return (this.mem[k] !== undefined) ? this.mem[k] : d; },
+  set(k, v){
+    this.mem[k] = v;
+    try { localStorage.setItem('mp_data', JSON.stringify(this.mem)); } catch(e){}
+    if (tg && tg.CloudStorage) { try { tg.CloudStorage.setItem('mp_data', JSON.stringify(this.mem)); } catch(e){} }
+  },
+  wipe(){ this.mem = {}; try{localStorage.removeItem('mp_data');}catch(e){} if (tg&&tg.CloudStorage){try{tg.CloudStorage.removeItem('mp_data');}catch(e){}} }
+};
+store.init();
+
+/* ---------------- AUDIO ---------------- */
+const Sound = {
+  ctx: null,
+  ensure(){
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){} }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  tone(freq, dur, type, vol, slide){
+    if (!store.get('sound', true)) return;
+    this.ensure(); if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    g.gain.setValueAtTime(vol || .18, t);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(this.ctx.destination);
+    o.start(t); o.stop(t + dur + .02);
+  },
+  drop(){ this.tone(340, .12, 'sine', .12, 190); },
+  merge(lvl, combo){
+    const base = 240 + lvl * 26;
+    this.tone(base, .18, 'sine', .2, base * 1.6);
+    this.tone(base * 1.5, .24, 'triangle', .12, base * 2.2);
+    if (combo >= 2) this.tone(base * 2, .3, 'sine', .1, base * 3);
+  },
+  unlock(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>this.tone(f,.22,'triangle',.16), i*90)); },
+  over(){ [440,349,262,196].forEach((f,i)=>setTimeout(()=>this.tone(f,.3,'sawtooth',.09), i*160)); },
+  click(){ this.tone(600, .05, 'square', .05); }
+};
+function haptic(style){
+  if (!store.get('haptic', true)) return;
+  if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred(style || 'light'); } catch(e){} }
+}
+
+/* ---------------- BACKGROUND (stars + planets) ---------------- */
+const bg = document.getElementById('bgCanvas'), bctx = bg.getContext('2d');
+let stars = [], bgPlanets = [];
+function initBG(){
+  bg.width = innerWidth; bg.height = innerHeight;
+  stars = [];
+  for (let i = 0; i < 130; i++) stars.push({
+    x: Math.random()*bg.width, y: Math.random()*bg.height,
+    z: .3 + Math.random()*.7, r: .4 + Math.random()*1.4, tw: Math.random()*Math.PI*2
+  });
+  bgPlanets = [
+    {x:.14,y:.2,r:54,c1:'#3b2f7a',c2:'#7c6cff',sp:.06},
+    {x:.86,y:.62,r:70,c1:'#083b4d',c2:'#00b8d9',sp:.04},
+    {x:.7,y:.13,r:32,c1:'#4d2a3a',c2:'#ff5470',sp:.08},
+  ];
+}
+function drawBG(t){
+  bctx.fillStyle = '#050510'; bctx.fillRect(0,0,bg.width,bg.height);
+  // nebula glow
+  const g1 = bctx.createRadialGradient(bg.width*.2, bg.height*.8, 0, bg.width*.2, bg.height*.8, bg.width*.8);
+  g1.addColorStop(0,'rgba(90,60,180,.12)'); g1.addColorStop(1,'transparent');
+  bctx.fillStyle = g1; bctx.fillRect(0,0,bg.width,bg.height);
+  const g2 = bctx.createRadialGradient(bg.width*.85, bg.height*.15, 0, bg.width*.85, bg.height*.15, bg.width*.7);
+  g2.addColorStop(0,'rgba(0,140,180,.1)'); g2.addColorStop(1,'transparent');
+  bctx.fillStyle = g2; bctx.fillRect(0,0,bg.width,bg.height);
+  // stars
+  for (const s of stars){
+    s.y += s.z * .12; if (s.y > bg.height) { s.y = -2; s.x = Math.random()*bg.width; }
+    const a = .35 + .55 * Math.abs(Math.sin(t*.001 + s.tw));
+    bctx.globalAlpha = a * s.z;
+    bctx.fillStyle = '#cfe2ff';
+    bctx.beginPath(); bctx.arc(s.x, s.y, s.r, 0, 7); bctx.fill();
+  }
+  bctx.globalAlpha = 1;
+  // planets
+  for (const p of bgPlanets){
+    const px = p.x*bg.width + Math.sin(t*.0002*p.sp*10)*14;
+    const py = p.y*bg.height + Math.cos(t*.00016*p.sp*10)*10;
+    const grd = bctx.createRadialGradient(px-p.r*.35, py-p.r*.35, p.r*.1, px, py, p.r);
+    grd.addColorStop(0, p.c2); grd.addColorStop(1, p.c1);
+    bctx.globalAlpha = .8;
+    bctx.shadowColor = p.c2; bctx.shadowBlur = 30;
+    bctx.fillStyle = grd;
+    bctx.beginPath(); bctx.arc(px, py, p.r, 0, 7); bctx.fill();
+    bctx.shadowBlur = 0; bctx.globalAlpha = 1;
+  }
+}
+
+/* ---------------- GAME ---------------- */
+const gc = document.getElementById('gameCanvas'), ctx = gc.getContext('2d');
+let G = null; // game state
+
+function newGame(){
+  const W = innerWidth, H = innerHeight;
+  gc.width = W; gc.height = H;
+  const top = Math.max(120, H * .14);
+  const bottomPad = Math.max(12, H * .015);
+  G = {
+    W, H, top, bottom: H - bottomPad,
+    wallL: 10, wallR: W - 10,
+    bodies: [], particles: [], popups: [],
+    score: 0, merges: 0, maxLevel: 0,
+    aimX: W/2, next: randLevel(), current: randLevel(),
+    canDrop: true, dropCooldown: 0,
+    over: false, paused: false, overTimer: 0, dangerT: 0,
+    shake: 0, lastTime: 0, started: true, dropAnim: 0
+  };
+  document.getElementById('hudScore').textContent = '0';
+  document.getElementById('hudBest').textContent = fmt(store.get('best', 0));
+  updateNextPreview();
+}
+function randLevel(){
+  // ранние уровни чаще
+  const r = Math.random();
+  if (r < .42) return 0;
+  if (r < .72) return 1;
+  if (r < .90) return 2;
+  if (r < .98) return 3;
+  return 4;
+}
+function radiusFor(l){ return Math.min(G.W * .052 * Math.pow(1.155, l), G.W * .21); }
+function fmt(n){ return (n||0).toLocaleString('ru-RU'); }
+
+function updateNextPreview(){
+  document.getElementById('nextEmoji').textContent = LEVELS[G.next].e;
+}
+
+function drop(){
+  if (!G || G.paused || G.over || !G.canDrop) return;
+  Sound.drop(); haptic('light');
+  const lvl = G.current;
+  G.bodies.push({
+    x: clampAim(G.aimX), y: G.top - radiusFor(lvl) - 4,
+    vx: 0, vy: 1, lvl, r: radiusFor(lvl),
+    born: performance.now(), overT: 0, id: Math.random()
+  });
+  G.current = G.next; G.next = randLevel();
+  updateNextPreview();
+  G.canDrop = false; G.dropCooldown = 550; G.dropAnim = 1;
+}
+function clampAim(x){
+  const r = radiusFor(G.current);
+  return Math.max(G.wallL + r, Math.min(G.wallR - r, x));
+}
+
+/* ---------- PHYSICS ---------- */
+const GRAV = .34, REST = .22, FRIC = .985;
+function stepPhysics(){
+  const bs = G.bodies;
+  for (const b of bs){
+    b.vy += GRAV;
+    b.vx *= FRIC; b.vy *= .999;
+    b.x += b.vx; b.y += b.vy;
+    // walls
+    if (b.x - b.r < G.wallL){ b.x = G.wallL + b.r; b.vx = Math.abs(b.vx) * REST; }
+    if (b.x + b.r > G.wallR){ b.x = G.wallR - b.r; b.vx = -Math.abs(b.vx) * REST; }
+    if (b.y + b.r > G.bottom){ b.y = G.bottom - b.r; b.vy = -Math.abs(b.vy) * REST; b.vx *= .92; if (Math.abs(b.vy) < .6) b.vy = 0; }
+  }
+  // pairwise collisions
+  const mergePairs = [];
+  for (let i = 0; i < bs.length; i++){
+    for (let j = i+1; j < bs.length; j++){
+      const a = bs[i], b = bs[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const minD = a.r + b.r;
+      const d2 = dx*dx + dy*dy;
+      if (d2 >= minD*minD || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = dx/d, ny = dy/d;
+      const overlap = minD - d;
+      const ma = a.r*a.r, mb = b.r*b.r, tm = ma + mb;
+      // positional correction
+      a.x -= nx * overlap * (mb/tm) * .8; a.y -= ny * overlap * (mb/tm) * .8;
+      b.x += nx * overlap * (ma/tm) * .8; b.y += ny * overlap * (ma/tm) * .8;
+      // impulse
+      const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+      const velN = rvx*nx + rvy*ny;
+      if (velN < 0){
+        const imp = -(1 + REST) * velN / (1/ma + 1/mb);
+        a.vx -= imp * nx / ma; a.vy -= imp * ny / ma;
+        b.vx += imp * nx / mb; b.vy += imp * ny / mb;
+      }
+      if (a.lvl === b.lvl && a.lvl < LEVELS.length - 1 && performance.now() - a.born > 120 && performance.now() - b.born > 120){
+        mergePairs.push([a, b]);
+      }
+    }
+  }
+  if (mergePairs.length) doMerges(mergePairs);
+}
+function doMerges(pairs){
+  const used = new Set();
+  for (const [a, b] of pairs){
+    if (used.has(a.id) || used.has(b.id)) continue;
+    used.add(a.id); used.add(b.id);
+    a.dead = b.dead = true;
+    const nl = a.lvl + 1;
+    const nb = {
+      x: (a.x + b.x)/2, y: (a.y + b.y)/2,
+      vx: (a.vx + b.vx)/2, vy: Math.min((a.vy + b.vy)/2, 1) - 1.5,
+      lvl: nl, r: radiusFor(nl), born: performance.now(), id: Math.random(), overT: 0
+    };
+    G.bodies.push(nb);
+    // score & combo
+    G.merges++;
+    const gained = LEVELS[nl].s;
+    G.score += gained;
+    G.popups.push({x: nb.x, y: nb.y - nb.r, txt: '+' + fmt(gained), life: 1, col: nl >= RARE_FROM ? '#ffd54f' : '#9be8ff'});
+    burst(nb.x, nb.y, nb.r, nl);
+    Sound.merge(nl, 1); haptic(nl >= 8 ? 'heavy' : 'medium');
+    if (nl > G.maxLevel) G.maxLevel = nl;
+    checkUnlock(nl, gained);
+    document.getElementById('hudScore').textContent = fmt(G.score);
+    G.shake = Math.min(8, 2 + nl * .4);
+  }
+  G.bodies = G.bodies.filter(b => !b.dead);
+}
+function checkUnlock(nl, gained){
+  const coll = store.get('collection', {});
+  const isNew = !coll[nl];
+  if (isNew){
+    coll[nl] = gained; store.set('collection', coll);
+    setTimeout(()=>{ toast('🎉 НОВЫЙ ОБЪЕКТ ОТКРЫТ! ' + LEVELS[nl].e + ' ' + LEVELS[nl].n, 'gold'); Sound.unlock(); }, 60);
+    if (nl >= RARE_FROM) setTimeout(()=> toast('🏆 ДОСТИЖЕНИЕ: ' + LEVELS[nl].n + '!', 'gold'), 1500);
+  } else if (gained > coll[nl]) { coll[nl] = gained; store.set('collection', coll); }
+  // крупнейший объект за всё время
+  if (nl > store.get('maxLevelEver', -1)) store.set('maxLevelEver', nl);
+}
+function burst(x, y, r, lvl){
+  const n = Math.min(28, 10 + lvl * 2);
+  const hue = 190 + lvl * 8;
+  for (let i = 0; i < n; i++){
+    const ang = Math.random() * Math.PI * 2, sp = 1 + Math.random() * (2.5 + lvl * .3);
+    G.particles.push({
+      x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - 1,
+      life: 1, dec: .015 + Math.random()*.02,
+      r: 1.5 + Math.random()*2.5, hue: hue + Math.random()*50 - 25
+    });
+  }
+}
+
+/* ---------- GAME OVER CHECK ---------- */
+function checkGameOver(dt){
+  let worst = 0;
+  for (const b of G.bodies){
+    // объект полностью выше верхней границы контейнера
+    if (b.y + b.r < G.top + 2 && Math.abs(b.vy) < .8) b.overT += dt;
+    else b.overT = 0;
+    worst = Math.max(worst, b.overT);
+  }
+  G.dangerT = worst;
+  if (worst > 2000) endGame(false);
+}
+function endGame(voluntary){
+  if (G.over) return;
+  G.over = true; G.started = false;
+  // сохранение
+  const best = store.get('best', 0);
+  const isRecord = G.score > best;
+  if (isRecord) store.set('best', G.score);
+  const today = new Date().toISOString().slice(0,10);
+  const daily = store.get('daily', {});
+  if (!daily[today] || G.score > daily[today]) { daily[today] = G.score; store.set('daily', daily); }
+  store.set('mergesTotal', store.get('mergesTotal', 0) + G.merges);
+  store.set('gamesPlayed', store.get('gamesPlayed', 0) + 1);
+  Sound.over();
+  // заполнение статистики
+  document.getElementById('goEmoji').textContent = LEVELS[G.maxLevel] ? LEVELS[G.maxLevel].e : '☄️';
+  document.getElementById('goScore').textContent = fmt(G.score) + (isRecord ? ' 🎉' : '');
+  document.getElementById('goBest').textContent = fmt(Math.max(best, G.score));
+  document.getElementById('goMerges').textContent = fmt(G.merges);
+  document.getElementById('goMaxName').textContent = LEVELS[G.maxLevel] ? LEVELS[G.maxLevel].n : '—';
+  document.getElementById('goLevels').textContent = (store.get('collection', {}) && Object.keys(store.get('collection', {})).length) + ' / 21';
+  document.querySelector('#gameOverOverlay .overlayTitle').textContent = voluntary ? 'ИГРА ЗАВЕРШЕНА' : 'GAME OVER';
+  setTimeout(()=> showOverlay('gameOverOverlay'), 500);
+  refreshUI();
+}
+
+/* ---------- RENDER ---------- */
+function renderGame(t){
+  ctx.clearRect(0, 0, G.W, G.H);
+  ctx.save();
+  if (G.shake > 0){ ctx.translate((Math.random()-.5)*G.shake, (Math.random()-.5)*G.shake); G.shake *= .85; if (G.shake < .3) G.shake = 0; }
+  // контейнер
+  ctx.strokeStyle = 'rgba(124,108,255,.55)'; ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(124,108,255,.8)'; ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.moveTo(G.wallL, G.top - 8); ctx.lineTo(G.wallL, G.bottom);
+  ctx.lineTo(G.wallR, G.bottom); ctx.lineTo(G.wallR, G.top - 8);
+  ctx.stroke(); ctx.shadowBlur = 0;
+  // опасная зона (мигает при заполнении)
+  const danger = G.dangerT > 200;
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle = danger ? `rgba(255,84,112,${.4 + .5*Math.abs(Math.sin(t*.008))})` : 'rgba(255,84,112,.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(G.wallL, G.top); ctx.lineTo(G.wallR, G.top); ctx.stroke();
+  ctx.setLineDash([]);
+  // прицел
+  if (!G.over && !G.paused && G.canDrop){
+    const ar = radiusFor(G.current);
+    ctx.strokeStyle = 'rgba(0,229,255,.35)'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath(); ctx.moveTo(G.aimX, G.top - ar - 6); ctx.lineTo(G.aimX, G.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = Math.round(ar * 1.5) + 'px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = .55;
+    ctx.fillText(LEVELS[G.current].e, G.aimX, G.top - ar - 4 + Math.sin(t*.004)*2);
+    ctx.globalAlpha = 1;
+  }
+  // тела
+  for (const b of G.bodies) drawBody(b, t);
+  // частицы
+  for (const p of G.particles){
+    p.x += p.vx; p.y += p.vy; p.vy += .05; p.vx *= .98;
+    p.life -= p.dec;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = `hsl(${p.hue},90%,70%)`;
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  G.particles = G.particles.filter(p => p.life > 0);
+  // всплывающие очки
+  for (const p of G.popups){
+    p.y -= .8; p.life -= .016;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.col; ctx.font = '900 17px sans-serif'; ctx.textAlign = 'center';
+    ctx.shadowColor = p.col; ctx.shadowBlur = 10;
+    ctx.fillText(p.txt, p.x, p.y);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  G.popups = G.popups.filter(p => p.life > 0);
+  ctx.restore();
+}
+function drawBody(b, t){
+  const grow = Math.min(1, (performance.now() - b.born) / 200);
+  const r = b.r * (0.6 + 0.4 * easeOutBack(grow));
+  const col = `hsl(${200 + b.lvl * 9},85%,${60 + b.lvl}%)`;
+  ctx.save();
+  ctx.shadowColor = col; ctx.shadowBlur = 10 + b.lvl * 2.5;
+  const grd = ctx.createRadialGradient(b.x - r*.3, b.y - r*.3, r*.1, b.x, b.y, r);
+  grd.addColorStop(0, 'rgba(255,255,255,.28)'); grd.addColorStop(.35, `hsla(${210+b.lvl*9},60%,30%,.95)`); grd.addColorStop(1, `hsla(${250+b.lvl*9},70%,12%,.98)`);
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, 7); ctx.fill();
+  ctx.restore();
+  // emoji
+  ctx.font = Math.round(r * 1.35) + 'px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(LEVELS[b.lvl].e, b.x, b.y + r * .06);
+  // кольцо для редких
+  if (b.lvl >= RARE_FROM){
+    ctx.strokeStyle = `rgba(255,213,79,${.3 + .25*Math.sin(t*.004)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, r + 4 + Math.sin(t*.004)*2, 0, 7); ctx.stroke();
+  }
+}
+function easeOutBack(x){ const c = 1.70158; return 1 + (c+1)*Math.pow(x-1,3) + c*Math.pow(x-1,2); }
+
+/* ---------- MAIN LOOP ---------- */
+function loop(t){
+  requestAnimationFrame(loop);
+  drawBG(t);
+  if (G && G.started && !G.paused && !G.over){
+    const dt = Math.min(50, t - (G.lastTime || t)); G.lastTime = t;
+    if (G.dropCooldown > 0){ G.dropCooldown -= dt; if (G.dropCooldown <= 0) G.canDrop = true; }
+    for (let s = 0; s < 2; s++) stepPhysics();
+    checkGameOver(dt);
+    renderGame(t);
+  } else if (G && (G.paused || G.over)){
+    renderGame(t);
+  }
+}
+requestAnimationFrame(loop);
+
+/* ---------- INPUT ---------- */
+gc.addEventListener('pointerdown', e => {
+  Sound.ensure();
+  if (!G || G.paused || G.over) return;
+  G.aimX = clampAim(e.clientX);
+});
+gc.addEventListener('pointermove', e => {
+  if (!G || G.paused || G.over) return;
+  G.aimX = clampAim(e.clientX);
+});
+gc.addEventListener('pointerup', e => {
+  Sound.ensure();
+  if (!G || G.paused || G.over) return;
+  G.aimX = clampAim(e.clientX);
+  drop();
+});
+addEventListener('keydown', e => {
+  if (!G || G.paused || G.over) return;
+  if (e.key === 'ArrowLeft') G.aimX = clampAim(G.aimX - 24);
+  if (e.key === 'ArrowRight') G.aimX = clampAim(G.aimX + 24);
+  if (e.key === ' ' || e.key === 'ArrowDown'){ e.preventDefault(); drop(); }
+  if (e.key === 'Escape') pauseGame();
+});
+
+/* ---------- NAVIGATION ---------- */
+const screens = ['menuScreen','gameScreen','recordsScreen','collectionScreen','settingsScreen'];
+function showScreen(id){
+  screens.forEach(s => document.getElementById(s).classList.toggle('active', s === id));
+  hideOverlays();
+}
+function showOverlay(id){ hideOverlays(); document.getElementById(id).classList.add('active'); }
+function hideOverlays(){ document.querySelectorAll('.overlay').forEach(o => o.classList.remove('active')); }
+
+function startGame(){
+  Sound.ensure(); Sound.click();
+  newGame();
+  showScreen('gameScreen');
+}
+function pauseGame(){
+  if (!G || G.over) return;
+  G.paused = true; showOverlay('pauseOverlay'); Sound.click();
+}
+function resumeGame(){
+  if (G) G.paused = false;
+  hideOverlays(); Sound.click();
+}
+function quitToMenu(){
+  G = null;
+  refreshUI();
+  showScreen('menuScreen');
+  Sound.click();
+}
+
+/* confirm helper */
+let confirmCb = null;
+function askConfirm(title, text, cb){
+  document.getElementById('cfTitle').textContent = title;
+  document.getElementById('cfText').textContent = text;
+  confirmCb = cb;
+  showOverlay('confirmModal');
+}
+document.getElementById('cfYes').onclick = () => { hideOverlays(); if (confirmCb){ const c = confirmCb; confirmCb = null; c(); } };
+document.getElementById('cfNo').onclick = () => { confirmCb = null; hideOverlays(); if (G && G.paused) showOverlay('pauseOverlay'); };
+
+/* ---------- BUTTONS ---------- */
+document.getElementById('btnPlay').onclick = startGame;
+document.getElementById('btnRecords').onclick = () => { renderRecords(); showScreen('recordsScreen'); Sound.click(); };
+document.getElementById('btnCollection').onclick = () => { renderCollection(); showScreen('collectionScreen'); Sound.click(); };
+document.getElementById('btnSettings').onclick = () => { showScreen('settingsScreen'); Sound.click(); };
+document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => { showScreen('menuScreen'); refreshUI(); Sound.click(); });
+
+document.getElementById('pauseBtn').onclick = pauseGame;
+document.getElementById('btnResume').onclick = resumeGame;
+document.getElementById('btnRestart').onclick = () =>
+  askConfirm('НАЧАТЬ ЗАНОВО?', 'Текущий прогресс партии будет потерян.', () => { startGame(); });
+document.getElementById('btnQuit').onclick = () =>
+  askConfirm('ЗАВЕРШИТЬ ИГРУ?', 'Текущий прогресс партии будет потерян.', () => { endGame(true); setTimeout(quitToMenu, 600); });
+
+document.getElementById('btnGoAgain').onclick = startGame;
+document.getElementById('btnGoMenu').onclick = quitToMenu;
+document.getElementById('btnGoShare').onclick = shareScore;
+document.getElementById('btnShare2').onclick = shareScore;
+
+/* ---------- SHARE ---------- */
+function shareScore(){
+  const score = Math.max(G ? G.score : 0, store.get('best', 0));
+  const text = 'Я набрал ' + fmt(score) + ' очков в Merge Planet! 🪐 Сможешь больше?';
+  const url = 'https://t.me/merge_planet_bot'; // замените на ссылку вашего бота/mini app
+  Sound.click(); haptic('medium');
+  if (tg && tg.openTelegramLink){
+    try { tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text)); return; } catch(e){}
+  }
+  if (navigator.share){
+    navigator.share({title:'Merge Planet', text, url}).catch(()=>{});
+  } else {
+    toast('📤 ' + text);
+  }
+}
+
+/* ---------- RENDER PAGES ---------- */
+function renderRecords(){
+  document.getElementById('recBest').textContent = fmt(store.get('best', 0));
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('recDaily').textContent = fmt((store.get('daily', {}))[today] || 0);
+  document.getElementById('recMerges').textContent = fmt(store.get('mergesTotal', 0));
+  const ml = store.get('maxLevelEver', -1);
+  document.getElementById('recMaxObj').textContent = ml >= 0 ? LEVELS[ml].e + ' ' + LEVELS[ml].n : '—';
+  document.getElementById('recGames').textContent = fmt(store.get('gamesPlayed', 0));
+  document.getElementById('recColl').textContent = Object.keys(store.get('collection', {})).length + ' / 21';
+}
+function renderCollection(){
+  const grid = document.getElementById('collGrid');
+  grid.innerHTML = '';
+  const coll = store.get('collection', {});
+  LEVELS.forEach((L, i) => {
+    const unlocked = coll[i] !== undefined;
+    const div = document.createElement('div');
+    div.className = 'collItem' + (unlocked ? '' : ' locked');
+    div.innerHTML = unlocked
+      ? `<div class="collEmoji">${L.e}</div><div class="collName">${L.n}</div><div class="collLvl">УРОВЕНЬ ${i+1}</div><div class="collScore">+${fmt(coll[i])} очков</div>`
+      : `<div class="collEmoji">❓</div><div class="collName">???</div><div class="collLvl">УРОВЕНЬ ${i+1}</div><div class="collScore">—</div>`;
+    grid.appendChild(div);
+  });
+}
+
+/* ---------- SETTINGS ---------- */
+function syncToggles(){
+  document.getElementById('tglSound').classList.toggle('on', store.get('sound', true));
+  document.getElementById('tglHaptic').classList.toggle('on', store.get('haptic', true));
+}
+document.getElementById('tglSound').onclick = function(){ store.set('sound', !store.get('sound', true)); syncToggles(); Sound.click(); };
+document.getElementById('tglHaptic').onclick = function(){ store.set('haptic', !store.get('haptic', true)); syncToggles(); haptic('medium'); };
+document.getElementById('btnReset').onclick = () =>
+  askConfirm('СБРОС ПРОГРЕССА?', 'Все рекорды и коллекция будут удалены безвозвратно.', () => { store.wipe(); syncToggles(); refreshUI(); toast('🗑 Прогресс сброшен'); });
+
+/* ---------- TOAST ---------- */
+function toast(msg, cls){
+  const wrap = document.getElementById('toastWrap');
+  const t = document.createElement('div');
+  t.className = 'toast' + (cls ? ' ' + cls : '');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+/* ---------- REFRESH UI / PROFILE ---------- */
+function refreshUI(){
+  document.getElementById('menuBest').textContent = fmt(store.get('best', 0));
+  syncToggles();
+  try {
+    const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    if (u){
+      document.getElementById('userChip').classList.remove('hidden');
+      document.getElementById('userName').textContent = '👤 ' + (u.first_name || 'Игрок');
+    }
+  } catch(e){}
+}
+
+/* ---------- RESIZE ---------- */
+function onResize(){
+  initBG();
+  if (G && G.started){
+    const W = innerWidth, H = innerHeight;
+    const top = Math.max(120, H * .14);
+    gc.width = W; gc.height = H;
+    // переносим границы, сохраняя тела
+    const sx = W / G.W;
+    G.W = W; G.H = H; G.top = top; G.bottom = H - Math.max(12, H * .015);
+    G.wallL = 10; G.wallR = W - 10;
+    for (const b of G.bodies){ b.x *= sx; b.r = radiusFor(b.lvl); if (b.y > G.bottom - b.r) b.y = G.bottom - b.r; }
+    G.aimX = clampAim(G.aimX);
+  }
+}
+addEventListener('resize', onResize);
+addEventListener('orientationchange', () => setTimeout(onResize, 200));
+
+initBG();
+refreshUI();
+document.addEventListener('visibilitychange', () => { if (document.hidden && G && G.started && !G.over) pauseGame(); });
+</script>
+</body>
+</html>
