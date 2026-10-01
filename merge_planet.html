@@ -757,7 +757,7 @@ document.getElementById('btnShare2').onclick = shareScore;
 function shareScore(){
   const score = Math.max(G ? G.score : 0, store.get('best', 0));
   const text = 'Я набрал ' + fmt(score) + ' очков в Merge Planet! 🪐 Сможешь больше?';
-  const url = 'https://t.me/merge_planet_bot'; // замените на ссылку вашего бота/mini app
+  const url = 'https://t.me/MergePlanetGameBot'; // замените на ссылку вашего бота/mini app
   Sound.click(); haptic('medium');
   if (tg && tg.openTelegramLink){
     try { tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text)); return; } catch(e){}
